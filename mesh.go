@@ -15,21 +15,18 @@ type Mesh struct {
 	faces     []*Face
 	vertices  []*Vertex
 	vertexMap map[int]*Vertex
-	faceMap   map[int]*Face
 	edgeMap   map[EdgeKey]*Edge
 }
 
 func NewMesh() *Mesh {
 	return &Mesh{
 		vertexMap: make(map[int]*Vertex, 128),
-		faceMap:   make(map[int]*Face, 128),
 		edgeMap:   make(map[EdgeKey]*Edge, 128),
 	}
 }
 
 func (m *Mesh) Parse(mesh string) error {
 	vid := 1
-	fid := 1
 	nid := 1
 	var ok bool
 	var line, t, xs, ys, zs, as, bs, cs string
@@ -150,8 +147,7 @@ func (m *Mesh) Parse(mesh string) error {
 				return errors.New("vertex not found for face")
 			}
 
-			m.createFace(fid, [3]*Vertex{av, bv, cv})
-			fid++
+			m.createFace([3]*Vertex{av, bv, cv})
 		default:
 			// we don't need anything except vertices and faces
 		}
@@ -260,21 +256,15 @@ func (m *Mesh) createVertex(id int, p Point3D) *Vertex {
 	return v
 }
 
-func (m *Mesh) createFace(id int, vertices [3]*Vertex) *Face {
-	face := &Face{
-		id: id,
-	}
+func (m *Mesh) createFace(vertices [3]*Vertex) *Face {
+	face := &Face{}
 	m.faces = append(m.faces, face)
-	m.faceMap[id] = face
 
 	// create halfedges
 	halfedges := [3]*HalfEdge{}
 	for i := 0; i < 3; i++ {
 		vertex := vertices[i]
-		he := &HalfEdge{
-			face:   face,
-			vertex: vertex,
-		}
+		he := &HalfEdge{vertex: vertex}
 		vertex.halfedge = he
 		halfedges[i] = he
 	}

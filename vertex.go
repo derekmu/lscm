@@ -9,7 +9,4 @@ type Vertex struct {
 	boundary bool
 	fixed    bool
 	index    int
-	valence  int
-	father   *Vertex
-	touched  bool
 }

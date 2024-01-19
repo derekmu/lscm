@@ -2,11 +2,9 @@ package lscm
 
 type HalfEdge struct {
 	edge         *Edge
-	face         *Face
 	vertex       *Vertex
 	prev         *HalfEdge
 	next         *HalfEdge
-	angle        float64
 	coefficients Point3D
 }
 

@@ -3,9 +3,6 @@ package lscm
 type Edge struct {
 	halfedges [2]*HalfEdge
 	length    float64
-	weight    float64
-	sharp     bool
-	mark      int
 }
 
 func (e *Edge) other(he *HalfEdge) *HalfEdge {
