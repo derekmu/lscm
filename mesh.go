@@ -1,11 +1,9 @@
 package lscm
 
 import (
-	"bufio"
 	"errors"
 	"fmt"
-	"log"
-	"os"
+	"io"
 	"strconv"
 	"strings"
 )
@@ -25,7 +23,7 @@ func NewMesh() *Mesh {
 	}
 }
 
-func (m *Mesh) Parse(mesh string) error {
+func (m *Mesh) ParseObj(obj string) error {
 	vid := 1
 	nid := 1
 	var ok bool
@@ -34,7 +32,7 @@ func (m *Mesh) Parse(mesh string) error {
 	var av, bv, cv *Vertex
 	var err error
 	for {
-		line, mesh, ok = strings.Cut(mesh, "\n")
+		line, obj, ok = strings.Cut(obj, "\n")
 		if !ok {
 			break
 		}
@@ -184,49 +182,34 @@ func (m *Mesh) Parse(mesh string) error {
 	return nil
 }
 
-func (m *Mesh) Write(filename string) error {
-	file, err := os.Create(filename)
-	if err != nil {
-		return err
-	}
-	defer func(file *os.File) {
-		if err := file.Close(); err != nil {
-			log.Panic(err)
-		}
-	}(file)
-	writer := bufio.NewWriter(file)
+func (m *Mesh) WriteObj(writer io.Writer) error {
 	// vertices
 	for _, vertex := range m.vertices {
-		_, err = fmt.Fprintf(writer, "v %f %f %f\n", vertex.point.X, vertex.point.Y, vertex.point.Z)
-		if err != nil {
+		if _, err := fmt.Fprintf(writer, "v %f %f %f\n", vertex.point.X, vertex.point.Y, vertex.point.Z); err != nil {
 			return err
 		}
 	}
 	// texture coordinates
 	for _, vertex := range m.vertices {
-		_, err = fmt.Fprintf(writer, "vt %f %f\n", vertex.uv.X, vertex.uv.Y)
-		if err != nil {
+		if _, err := fmt.Fprintf(writer, "vt %f %f\n", vertex.uv.X, vertex.uv.Y); err != nil {
 			return err
 		}
 	}
 	// vertex normals
 	for _, vertex := range m.vertices {
-		_, err = fmt.Fprintf(writer, "vn %f %f %f\n", vertex.normal.X, vertex.normal.Y, vertex.normal.Z)
-		if err != nil {
+		if _, err := fmt.Fprintf(writer, "vn %f %f %f\n", vertex.normal.X, vertex.normal.Y, vertex.normal.Z); err != nil {
 			return err
 		}
 	}
 	// faces
 	for _, face := range m.faces {
-		_, err := writer.WriteString("f ")
-		if err != nil {
+		if _, err := fmt.Fprint(writer, "f "); err != nil {
 			return err
 		}
 		halfedge := face.halfedge
 		for {
 			vertex := halfedge.vertex
-			_, err = fmt.Fprintf(writer, "%d/%d/%d ", vertex.id, vertex.id, vertex.id)
-			if err != nil {
+			if _, err := fmt.Fprintf(writer, "%d/%d/%d ", vertex.id, vertex.id, vertex.id); err != nil {
 				return err
 			}
 			halfedge = halfedge.next
@@ -234,14 +217,9 @@ func (m *Mesh) Write(filename string) error {
 				break
 			}
 		}
-		_, err = fmt.Fprintln(writer)
-		if err != nil {
+		if _, err := fmt.Fprintln(writer); err != nil {
 			return err
 		}
-	}
-	err = writer.Flush()
-	if err != nil {
-		return err
 	}
 	return nil
 }
