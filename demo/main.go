@@ -14,15 +14,15 @@ var human string
 func main() {
 	log.Printf("Parsing mesh")
 
-	mesh := lscm.NewMesh()
-	if err := mesh.ParseObj(human); err != nil {
+	mesh, err := lscm.ParseObj(human)
+	if err != nil {
 		log.Panic(err)
 	}
 
 	log.Printf("Running LSCM")
 
 	cm := lscm.NewLSCM(mesh)
-	if err := cm.Project(); err != nil {
+	if err = cm.Project(); err != nil {
 		log.Panic(err)
 	}
 
@@ -38,7 +38,7 @@ func main() {
 		}
 	}(file)
 	writer := bufio.NewWriter(file)
-	if err = mesh.WriteObj(writer); err != nil {
+	if err = lscm.WriteObj(writer, mesh); err != nil {
 		log.Panic(err)
 	}
 	if err = writer.Flush(); err != nil {
