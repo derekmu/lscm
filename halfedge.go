@@ -1,21 +1,21 @@
 package lscm
 
-type HalfEdge struct {
-	edge         *Edge
-	vertex       *Vertex
-	prev         *HalfEdge
-	next         *HalfEdge
-	coefficients Point3D
+type halfEdge struct {
+	edge         *edge
+	vertex       *vertex
+	prev         *halfEdge
+	next         *halfEdge
+	coefficients point3D
 }
 
-func (e *HalfEdge) other() *HalfEdge {
+func (e *halfEdge) other() *halfEdge {
 	return e.edge.other(e)
 }
 
-func (e *HalfEdge) source() *Vertex {
+func (e *halfEdge) source() *vertex {
 	return e.prev.vertex
 }
 
-func (e *HalfEdge) target() *Vertex {
+func (e *halfEdge) target() *vertex {
 	return e.vertex
 }

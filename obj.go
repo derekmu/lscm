@@ -8,6 +8,14 @@ import (
 	"strings"
 )
 
+type parseData struct {
+	points       []float32
+	uvs          []float32
+	normals      []float32
+	indices      []uint32
+	fixedIndices []uint32
+}
+
 // ParseObj parses a Wavefront .obj file content into a Mesh.
 //
 // At least two of the vertex lines need "fix 0.0, 0.0" post-fixed to the line to indicate fixed vertices for LSCM
@@ -17,8 +25,13 @@ import (
 // Only parses vertices, normals, and faces while ignoring other lines.
 // Assumes the corresponding normal indices are the same as the vertex indices.
 func ParseObj(obj string) (*Mesh, error) {
-	m := NewMesh()
-	ni := 0
+	pd := &parseData{
+		points:       make([]float32, 0, 5101*3),
+		uvs:          make([]float32, 0, 5101*2),
+		normals:      make([]float32, 0, 5101*3),
+		indices:      make([]uint32, 0, 10000*3),
+		fixedIndices: make([]uint32, 0, 2),
+	}
 	var line, t string
 	var ok bool
 	var err error
@@ -33,26 +46,25 @@ func ParseObj(obj string) (*Mesh, error) {
 		}
 		switch t {
 		case "v":
-			if err = parseVertex(m, line); err != nil {
+			if err = pd.parseVertex(line); err != nil {
 				return nil, err
 			}
 		case "vn":
-			if err = parseNormal(m, line, ni); err != nil {
+			if err = pd.parseNormal(line); err != nil {
 				return nil, err
 			}
-			ni++
 		case "f":
-			if err = parseFace(m, line); err != nil {
+			if err = pd.parseFace(line); err != nil {
 				return nil, err
 			}
 		default:
 			// ignore everything else
 		}
 	}
-	return m, nil
+	return NewMesh(pd.points, pd.uvs, pd.normals, pd.indices, pd.fixedIndices), nil
 }
 
-func parseFace(m *Mesh, line string) error {
+func (d *parseData) parseFace(line string) error {
 	var as, bs, cs string
 	var a, b, c int
 	var ok bool
@@ -81,12 +93,13 @@ func parseFace(m *Mesh, line string) error {
 	if err != nil {
 		return err
 	}
-	m.AddFace([3]int{a - 1, b - 1, c - 1})
+	d.indices = append(d.indices, uint32(a-1), uint32(b-1), uint32(c-1))
 	return nil
 }
 
-func parseNormal(m *Mesh, line string, ni int) error {
+func (d *parseData) parseNormal(line string) error {
 	var xs, ys, zs string
+	var x, y, z float64
 	var ok bool
 	var err error
 	xs, line, ok = strings.Cut(line, " ")
@@ -98,24 +111,25 @@ func parseNormal(m *Mesh, line string, ni int) error {
 		return errors.New("space not found separating coordinates for vertex normal")
 	}
 	zs, line, _ = strings.Cut(line, " ")
-	v := m.vertices[ni]
-	v.normal.X, err = strconv.ParseFloat(xs, 64)
+	x, err = strconv.ParseFloat(xs, 32)
 	if err != nil {
 		return err
 	}
-	v.normal.Y, err = strconv.ParseFloat(ys, 64)
+	y, err = strconv.ParseFloat(ys, 32)
 	if err != nil {
 		return err
 	}
-	v.normal.Z, err = strconv.ParseFloat(zs, 64)
+	z, err = strconv.ParseFloat(zs, 32)
 	if err != nil {
 		return err
 	}
+	d.normals = append(d.normals, float32(x), float32(y), float32(z))
 	return nil
 }
 
-func parseVertex(m *Mesh, line string) error {
+func (d *parseData) parseVertex(line string) error {
 	var xs, ys, zs string
+	var x, y, z, u, v float64
 	var ok bool
 	var err error
 	if xs, line, ok = strings.Cut(line, " "); !ok {
@@ -125,14 +139,13 @@ func parseVertex(m *Mesh, line string) error {
 		return errors.New("expected space after vertex y coordinate")
 	}
 	zs, line, _ = strings.Cut(line, " ")
-	p := Point3D{}
-	if p.X, err = strconv.ParseFloat(xs, 64); err != nil {
+	if x, err = strconv.ParseFloat(xs, 32); err != nil {
 		return err
 	}
-	if p.Y, err = strconv.ParseFloat(ys, 64); err != nil {
+	if y, err = strconv.ParseFloat(ys, 32); err != nil {
 		return err
 	}
-	if p.Z, err = strconv.ParseFloat(zs, 64); err != nil {
+	if z, err = strconv.ParseFloat(zs, 32); err != nil {
 		return err
 	}
 	fixLine, fixed := strings.CutPrefix(line, "fix ")
@@ -141,19 +154,18 @@ func parseVertex(m *Mesh, line string) error {
 		if !ok {
 			return errors.New("expected space after fixed vertex x coordinate")
 		}
-		uv := Point2D{}
-		uv.X, err = strconv.ParseFloat(xs, 64)
+		u, err = strconv.ParseFloat(xs, 32)
 		if err != nil {
 			return err
 		}
-		uv.Y, err = strconv.ParseFloat(ys, 64)
+		v, err = strconv.ParseFloat(ys, 32)
 		if err != nil {
 			return err
 		}
-		m.AddVertex(p, true, uv)
-	} else {
-		m.AddVertex(p, false, Point2D{})
+		d.fixedIndices = append(d.fixedIndices, uint32(len(d.points)/3))
 	}
+	d.points = append(d.points, float32(x), float32(y), float32(z))
+	d.uvs = append(d.uvs, float32(u), float32(v))
 	return nil
 }
 
@@ -163,31 +175,34 @@ func parseVertex(m *Mesh, line string) error {
 func WriteObj(w io.Writer, m *Mesh) error {
 	// vertices
 	for _, vertex := range m.vertices {
-		if _, err := fmt.Fprintf(w, "v %f %f %f\n", vertex.point.X, vertex.point.Y, vertex.point.Z); err != nil {
+		p := m.getPoint(vertex.id)
+		if _, err := fmt.Fprintf(w, "v %f %f %f\n", p.x, p.y, p.z); err != nil {
 			return err
 		}
 	}
 	// texture coordinates
 	for _, vertex := range m.vertices {
-		if _, err := fmt.Fprintf(w, "vt %f %f\n", vertex.uv.X, vertex.uv.Y); err != nil {
+		uv := m.getUV(vertex.id)
+		if _, err := fmt.Fprintf(w, "vt %f %f\n", uv.x, uv.y); err != nil {
 			return err
 		}
 	}
 	// vertex normals
 	for _, vertex := range m.vertices {
-		if _, err := fmt.Fprintf(w, "vn %f %f %f\n", vertex.normal.X, vertex.normal.Y, vertex.normal.Z); err != nil {
+		n := m.getNormal(vertex.id)
+		if _, err := fmt.Fprintf(w, "vn %f %f %f\n", n.x, n.y, n.z); err != nil {
 			return err
 		}
 	}
 	// faces
 	for _, face := range m.faces {
-		if _, err := fmt.Fprint(w, "f "); err != nil {
+		if _, err := fmt.Fprint(w, "f"); err != nil {
 			return err
 		}
 		halfedge := face.halfedge
 		for {
 			vertex := halfedge.vertex
-			if _, err := fmt.Fprintf(w, "%d/%d/%d ", vertex.id+1, vertex.id+1, vertex.id+1); err != nil {
+			if _, err := fmt.Fprintf(w, " %d/%d/%d", vertex.id+1, vertex.id+1, vertex.id+1); err != nil {
 				return err
 			}
 			halfedge = halfedge.next

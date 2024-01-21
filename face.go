@@ -1,5 +1,5 @@
 package lscm
 
-type Face struct {
-	halfedge *HalfEdge
+type face struct {
+	halfedge *halfEdge
 }

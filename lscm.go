@@ -7,26 +7,29 @@ import (
 )
 
 func RunLSCM(mesh *Mesh) error {
-	mesh.RemoveDanglingVertices()
-	mesh.UpdateBoundary()
+	mesh.removeDanglingVertices()
+	mesh.updateBoundary()
 
 	// set coefficients
 	for _, edge := range mesh.edges {
-		edge.updateLength()
+		p1 := mesh.getPoint(edge.halfedges[0].source().id)
+		p2 := mesh.getPoint(edge.halfedges[0].target().id)
+		vd := p1.sub(&p2)
+		edge.length = vd.norm()
 	}
 	for _, face := range mesh.faces {
-		hel := [3]float64{}
+		hel := [3]float32{}
 		he := face.halfedge
 		for i := 0; i < 3; i++ {
 			hel[i] = he.edge.length
 			he = he.next
 		}
 		// law of cosines
-		a := math.Acos((hel[0]*hel[0] + hel[2]*hel[2] - hel[1]*hel[1]) / (2 * hel[0] * hel[2]))
-		p := [3]Point3D{
+		a := math.Acos(float64((hel[0]*hel[0] + hel[2]*hel[2] - hel[1]*hel[1]) / (2 * hel[0] * hel[2])))
+		p := [3]point3D{
 			{0, 0, 0},
 			{hel[0], 0, 0},
-			{hel[2] * math.Cos(a), hel[2] * math.Sin(a), 0},
+			{hel[2] * float32(math.Cos(a)), hel[2] * float32(math.Sin(a)), 0},
 		}
 		n0 := p[1].sub(&p[0])
 		n1 := p[2].sub(&p[0])
@@ -37,15 +40,15 @@ func RunLSCM(mesh *Mesh) error {
 		for i := 0; i < 3; i++ {
 			np := p[(i+1)%3].sub(&p[i])
 			s := n.cross(&np)
-			s.divide(math.Sqrt(area))
+			s.divide(float32(math.Sqrt(float64(area))))
 			he.coefficients = s
 			he = he.next
 		}
 	}
 
 	// divide vertices into fixed and unfixed
-	vertices := make([]*Vertex, 0, len(mesh.vertices))
-	fixedVertices := make([]*Vertex, 0, 2)
+	vertices := make([]*vertex, 0, len(mesh.vertices))
+	fixedVertices := make([]*vertex, 0, 2)
 	for _, vertex := range mesh.vertices {
 		if vertex.fixed {
 			fixedVertices = append(fixedVertices, vertex)
@@ -76,17 +79,18 @@ func RunLSCM(mesh *Mesh) error {
 			v := he.next.target()
 			vid := v.index
 			if !v.fixed {
-				amat.Set(fid, vid, he.coefficients.X)
-				amat.Set(fn+fid, vn+vid, he.coefficients.X)
-				amat.Set(fid, vn+vid, -he.coefficients.Y)
-				amat.Set(fn+fid, vid, he.coefficients.Y)
+				amat.Set(fid, vid, float64(he.coefficients.x))
+				amat.Set(fn+fid, vn+vid, float64(he.coefficients.x))
+				amat.Set(fid, vn+vid, float64(-he.coefficients.y))
+				amat.Set(fn+fid, vid, float64(he.coefficients.y))
 			} else {
-				bmat.Set(fid, vid, he.coefficients.X)
-				bmat.Set(fn+fid, vfn+vid, he.coefficients.X)
-				bmat.Set(fid, vfn+vid, -he.coefficients.Y)
-				bmat.Set(fn+fid, vid, he.coefficients.Y)
-				fmat.SetVec(vid, v.uv.X)
-				fmat.SetVec(vfn+vid, v.uv.Y)
+				bmat.Set(fid, vid, float64(he.coefficients.x))
+				bmat.Set(fn+fid, vfn+vid, float64(he.coefficients.x))
+				bmat.Set(fid, vfn+vid, float64(-he.coefficients.y))
+				bmat.Set(fn+fid, vid, float64(he.coefficients.y))
+				uv := mesh.getUV(v.id)
+				fmat.SetVec(vid, float64(uv.x))
+				fmat.SetVec(vfn+vid, float64(uv.y))
 			}
 			he = he.next
 		}
@@ -103,24 +107,27 @@ func RunLSCM(mesh *Mesh) error {
 	}
 
 	// read UVs out to vertices
-	uvMin := Point2D{}
-	uvMax := Point2D{}
+	uvMin := point2D{}
+	uvMax := point2D{}
 	for i, v := range vertices {
-		v.uv = Point2D{
-			X: smat.At(i, 0),
-			Y: smat.At(i+vn, 0),
+		uv := point2D{
+			x: float32(smat.At(i, 0)),
+			y: float32(smat.At(i+vn, 0)),
 		}
-		uvMin.X = min(uvMin.X, v.uv.X)
-		uvMin.Y = min(uvMin.Y, v.uv.Y)
-		uvMax.X = max(uvMax.X, v.uv.X)
-		uvMax.Y = max(uvMax.Y, v.uv.Y)
+		mesh.setUV(v.id, uv)
+		uvMin.x = min(uvMin.x, uv.x)
+		uvMin.y = min(uvMin.y, uv.y)
+		uvMax.x = max(uvMax.x, uv.x)
+		uvMax.y = max(uvMax.y, uv.y)
 	}
 	// scale UVs to be within the range [0:1]
 	for _, v := range mesh.vertices {
-		v.uv = Point2D{
-			X: (v.uv.X - uvMin.X) / (uvMax.X - uvMin.X),
-			Y: (v.uv.Y - uvMin.Y) / (uvMax.Y - uvMin.Y),
+		uv := mesh.getUV(v.id)
+		uv = point2D{
+			x: (uv.x - uvMin.x) / (uvMax.x - uvMin.x),
+			y: (uv.y - uvMin.y) / (uvMax.y - uvMin.y),
 		}
+		mesh.setUV(v.id, uv)
 	}
 
 	return nil

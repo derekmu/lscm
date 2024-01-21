@@ -2,39 +2,39 @@ package lscm
 
 import "math"
 
-type Point3D struct {
-	X float64
-	Y float64
-	Z float64
+type point3D struct {
+	x float32
+	y float32
+	z float32
 }
 
-func (d *Point3D) sub(point *Point3D) Point3D {
-	return Point3D{
-		X: d.X - point.X,
-		Y: d.Y - point.Y,
-		Z: d.Z - point.Z,
+func (d *point3D) sub(point *point3D) point3D {
+	return point3D{
+		x: d.x - point.x,
+		y: d.y - point.y,
+		z: d.z - point.z,
 	}
 }
 
-func (d *Point3D) norm() float64 {
-	return math.Sqrt(d.X*d.X + d.Y*d.Y + d.Z*d.Z)
+func (d *point3D) norm() float32 {
+	return float32(math.Sqrt(float64(d.x*d.x + d.y*d.y + d.z*d.z)))
 }
 
-func (d *Point3D) cross(p *Point3D) Point3D {
-	return Point3D{
-		X: d.Y*p.Z - d.Z*p.Y,
-		Y: d.Z*p.X - d.X*p.Z,
-		Z: d.X*p.Y - d.Y*p.X,
+func (d *point3D) cross(p *point3D) point3D {
+	return point3D{
+		x: d.y*p.z - d.z*p.y,
+		y: d.z*p.x - d.x*p.z,
+		z: d.x*p.y - d.y*p.x,
 	}
 }
 
-func (d *Point3D) divide(v float64) {
-	d.X /= v
-	d.Y /= v
-	d.Z /= v
+func (d *point3D) divide(v float32) {
+	d.x /= v
+	d.y /= v
+	d.z /= v
 }
 
-type Point2D struct {
-	X float64
-	Y float64
+type point2D struct {
+	x float32
+	y float32
 }
