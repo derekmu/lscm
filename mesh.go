@@ -43,14 +43,15 @@ func NewMesh(points []float32, uvs []float32, normals []float32, indices []uint3
 	}
 	vertexCount := len(points) / 3
 	faceCount := len(indices) / 3
+	edgeCount := vertexCount + faceCount
 	m := &Mesh{
 		points:   points,
 		uvs:      uvs,
 		normals:  normals,
 		vertices: make([]*vertex, 0, vertexCount),
 		faces:    make([]*face, 0, faceCount),
-		edges:    make([]*edge, 0, faceCount*2),
-		edgeMap:  make(map[edgeKey]*edge, faceCount*2),
+		edges:    make([]*edge, 0, edgeCount),
+		edgeMap:  make(map[edgeKey]*edge, edgeCount),
 	}
 	for i := 0; i < vertexCount; i++ {
 		v := &vertex{id: i}

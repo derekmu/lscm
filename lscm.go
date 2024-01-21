@@ -10,14 +10,40 @@ func RunLSCM(mesh *Mesh) error {
 	mesh.removeDanglingVertices()
 	mesh.updateBoundary()
 
-	// set coefficients
+	// divide vertices into fixed and unfixed
+	vertices := make([]*vertex, 0, len(mesh.vertices))
+	fixedVertices := make([]*vertex, 0, 2)
+	for _, v := range mesh.vertices {
+		if v.fixed {
+			fixedVertices = append(fixedVertices, v)
+		} else {
+			vertices = append(vertices, v)
+		}
+	}
+	for i, v := range vertices {
+		v.index = i
+	}
+	for i, v := range fixedVertices {
+		v.index = i
+	}
+	if len(fixedVertices) < 2 {
+		return errors.New("at least two fixed vertices are required")
+	}
+
+	// prepare matrices of coefficients
+	fn := len(mesh.faces)
+	vfn := len(fixedVertices)
+	vn := len(vertices)
+	amat := mat.NewDense(2*fn, 2*vn, nil)
+	bmat := mat.NewDense(2*fn, 2*vfn, nil)
+	fmat := mat.NewVecDense(2*vfn, nil)
 	for _, e := range mesh.edges {
 		p1 := mesh.getPoint(e.halfedges[0].source().id)
 		p2 := mesh.getPoint(e.halfedges[0].target().id)
 		vd := p1.sub(&p2)
 		e.length = vd.norm()
 	}
-	for _, f := range mesh.faces {
+	for fid, f := range mesh.faces {
 		hel := [3]float32{}
 		he := f.halfedge
 		for i := 0; i < 3; i++ {
@@ -39,55 +65,20 @@ func RunLSCM(mesh *Mesh) error {
 		he = f.halfedge
 		for i := 0; i < 3; i++ {
 			np := p[(i+1)%3].sub(&p[i])
-			s := n.cross(&np)
-			s.divide(float32(math.Sqrt(float64(area))))
-			he.coefficients = s
-			he = he.next
-		}
-	}
-
-	// divide vertices into fixed and unfixed
-	vertices := make([]*vertex, 0, len(mesh.vertices))
-	fixedVertices := make([]*vertex, 0, 2)
-	for _, v := range mesh.vertices {
-		if v.fixed {
-			fixedVertices = append(fixedVertices, v)
-		} else {
-			vertices = append(vertices, v)
-		}
-	}
-	for i, v := range vertices {
-		v.index = i
-	}
-	for i, v := range fixedVertices {
-		v.index = i
-	}
-	if len(fixedVertices) < 2 {
-		return errors.New("at least two fixed vertices are required")
-	}
-
-	// prepare matrices for least squares
-	fn := len(mesh.faces)
-	vfn := len(fixedVertices)
-	vn := len(vertices)
-	amat := mat.NewDense(2*fn, 2*vn, nil)
-	bmat := mat.NewDense(2*fn, 2*vfn, nil)
-	fmat := mat.NewVecDense(2*vfn, nil)
-	for fid, face := range mesh.faces {
-		he := face.halfedge
-		for i := 0; i < 3; i++ {
+			c := n.cross(&np)
+			c.divide(float32(math.Sqrt(float64(area))))
 			v := he.next.target()
 			vid := v.index
 			if !v.fixed {
-				amat.Set(fid, vid, float64(he.coefficients.x))
-				amat.Set(fn+fid, vn+vid, float64(he.coefficients.x))
-				amat.Set(fid, vn+vid, float64(-he.coefficients.y))
-				amat.Set(fn+fid, vid, float64(he.coefficients.y))
+				amat.Set(fid, vid, float64(c.x))
+				amat.Set(fn+fid, vn+vid, float64(c.x))
+				amat.Set(fid, vn+vid, float64(-c.y))
+				amat.Set(fn+fid, vid, float64(c.y))
 			} else {
-				bmat.Set(fid, vid, float64(he.coefficients.x))
-				bmat.Set(fn+fid, vfn+vid, float64(he.coefficients.x))
-				bmat.Set(fid, vfn+vid, float64(-he.coefficients.y))
-				bmat.Set(fn+fid, vid, float64(he.coefficients.y))
+				bmat.Set(fid, vid, float64(c.x))
+				bmat.Set(fn+fid, vfn+vid, float64(c.x))
+				bmat.Set(fid, vfn+vid, float64(-c.y))
+				bmat.Set(fn+fid, vid, float64(c.y))
 				uv := mesh.getUV(v.id)
 				fmat.SetVec(vid, float64(uv.x))
 				fmat.SetVec(vfn+vid, float64(uv.y))

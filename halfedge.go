@@ -1,11 +1,10 @@
 package lscm
 
 type halfEdge struct {
-	edge         *edge
-	vertex       *vertex
-	prev         *halfEdge
-	next         *halfEdge
-	coefficients point3D
+	edge   *edge
+	vertex *vertex
+	prev   *halfEdge
+	next   *halfEdge
 }
 
 func (e *halfEdge) other() *halfEdge {
