@@ -61,7 +61,7 @@ func ParseObj(obj string) (*Mesh, error) {
 			// ignore everything else
 		}
 	}
-	return NewMesh(pd.points, pd.uvs, pd.normals, pd.indices, pd.fixedIndices), nil
+	return NewMesh(pd.points, pd.uvs, pd.normals, pd.indices, pd.fixedIndices)
 }
 
 func (d *parseData) parseFace(line string) error {

@@ -1,9 +1,10 @@
 package lscm
 
+import "errors"
+
 type Mesh struct {
-	points []float32
-	uvs    []float32
-	// normals are only a convenience for the demo to copy from the original file, they aren't used for LSCM
+	points  []float32
+	uvs     []float32
 	normals []float32
 
 	vertices []*vertex
@@ -12,7 +13,34 @@ type Mesh struct {
 	edgeMap  map[edgeKey]*edge
 }
 
-func NewMesh(points []float32, uvs []float32, normals []float32, indices []uint32, fixedIndices []uint32) *Mesh {
+/*
+NewMesh creates a Mesh object from the buffers provided. The buffers provided may be modified by LSCM.
+
+Parameters:
+  - points: slice of vertex coordinates, every 3 elements representing a vertex
+  - uvs: slice of texture coordinates, every 2 elements representing a vertex, the values will be overwritten by LSCM
+  - normals: may be nil, it is only included for convenience and not used by LSCM
+  - indices: slice of vertex indices for each face, every 3 elements representing a face
+  - fixedIndices: slice of vertex indices for fixed uvs for LSCM, at least 2 are required
+
+If the wrong number of points, uvs, indices, or fixedIndices is detected, an error is returned.
+*/
+func NewMesh(points []float32, uvs []float32, normals []float32, indices []uint32, fixedIndices []uint32) (*Mesh, error) {
+	if len(points)%3 != 0 {
+		return nil, errors.New("the number of points must be divisible by 3")
+	}
+	if len(uvs)%2 != 0 {
+		return nil, errors.New("the number of uvs must be divisible by 2")
+	}
+	if len(points)/3 != len(uvs)/2 {
+		return nil, errors.New("there must be 2 uv coordinates for every 3 vertex coordinates")
+	}
+	if len(indices)%3 != 0 {
+		return nil, errors.New("the number of indices must be divisible by 3")
+	}
+	if len(fixedIndices) < 2 {
+		return nil, errors.New("the number of fixed indices must be at least 2")
+	}
 	vertexCount := len(points) / 3
 	faceCount := len(indices) / 3
 	m := &Mesh{
@@ -34,7 +62,7 @@ func NewMesh(points []float32, uvs []float32, normals []float32, indices []uint3
 	for _, i := range fixedIndices {
 		m.vertices[i].fixed = true
 	}
-	return m
+	return m, nil
 }
 
 func (m *Mesh) getPoint(vi int) point3D {
@@ -90,8 +118,8 @@ func (m *Mesh) GetUVs() []float32 {
 }
 
 func (m *Mesh) addFace(vis [3]int) *face {
-	face := &face{}
-	m.faces = append(m.faces, face)
+	f := &face{}
+	m.faces = append(m.faces, f)
 	// create halfedges
 	halfedges := [3]*halfEdge{}
 	for i, vi := range vis {
@@ -106,31 +134,31 @@ func (m *Mesh) addFace(vis [3]int) *face {
 		halfedges[i].prev = halfedges[(i+2)%3]
 	}
 	// link to face
-	face.halfedge = halfedges[0]
+	f.halfedge = halfedges[0]
 	// link to edges
 	for i, vi := range vis {
-		edge := m.addEdge(vi, vis[(i+2)%3])
-		if edge.halfedges[0] == nil {
-			edge.halfedges[0] = halfedges[i]
+		e := m.addEdge(vi, vis[(i+2)%3])
+		if e.halfedges[0] == nil {
+			e.halfedges[0] = halfedges[i]
 		} else {
-			edge.halfedges[1] = halfedges[i]
+			e.halfedges[1] = halfedges[i]
 		}
-		halfedges[i].edge = edge
+		halfedges[i].edge = e
 	}
-	return face
+	return f
 }
 
 func (m *Mesh) addEdge(vi1, vi2 int) *edge {
 	key := edgeKey{min(vi1, vi2), max(vi1, vi2)}
-	if edge, ok := m.edgeMap[key]; ok {
-		return edge
+	if e, ok := m.edgeMap[key]; ok {
+		return e
 	}
-	edge := &edge{
+	e := &edge{
 		halfedges: [2]*halfEdge{},
 	}
-	m.edges = append(m.edges, edge)
-	m.edgeMap[key] = edge
-	return edge
+	m.edges = append(m.edges, e)
+	m.edgeMap[key] = e
+	return e
 }
 
 func (m *Mesh) removeDanglingVertices() {
@@ -154,11 +182,11 @@ func (m *Mesh) removeDanglingVertices() {
 }
 
 func (m *Mesh) updateBoundary() {
-	for _, edge := range m.edges {
-		if edge.halfedges[1] == nil {
+	for _, e := range m.edges {
+		if e.halfedges[1] == nil {
 			// make boundary vertex halfedges to be the most counter-clockwise
-			edge.halfedges[0].vertex.rotateCcwAboutTarget()
-			edge.halfedges[0].prev.vertex.rotateCcwAboutTarget()
+			e.halfedges[0].vertex.rotateCcwAboutTarget()
+			e.halfedges[0].prev.vertex.rotateCcwAboutTarget()
 		}
 	}
 }

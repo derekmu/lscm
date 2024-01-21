@@ -11,15 +11,15 @@ func RunLSCM(mesh *Mesh) error {
 	mesh.updateBoundary()
 
 	// set coefficients
-	for _, edge := range mesh.edges {
-		p1 := mesh.getPoint(edge.halfedges[0].source().id)
-		p2 := mesh.getPoint(edge.halfedges[0].target().id)
+	for _, e := range mesh.edges {
+		p1 := mesh.getPoint(e.halfedges[0].source().id)
+		p2 := mesh.getPoint(e.halfedges[0].target().id)
 		vd := p1.sub(&p2)
-		edge.length = vd.norm()
+		e.length = vd.norm()
 	}
-	for _, face := range mesh.faces {
+	for _, f := range mesh.faces {
 		hel := [3]float32{}
-		he := face.halfedge
+		he := f.halfedge
 		for i := 0; i < 3; i++ {
 			hel[i] = he.edge.length
 			he = he.next
@@ -36,7 +36,7 @@ func RunLSCM(mesh *Mesh) error {
 		n := n0.cross(&n1)
 		area := n.norm() / 2.0
 		n.divide(area)
-		he = face.halfedge
+		he = f.halfedge
 		for i := 0; i < 3; i++ {
 			np := p[(i+1)%3].sub(&p[i])
 			s := n.cross(&np)
@@ -49,18 +49,18 @@ func RunLSCM(mesh *Mesh) error {
 	// divide vertices into fixed and unfixed
 	vertices := make([]*vertex, 0, len(mesh.vertices))
 	fixedVertices := make([]*vertex, 0, 2)
-	for _, vertex := range mesh.vertices {
-		if vertex.fixed {
-			fixedVertices = append(fixedVertices, vertex)
+	for _, v := range mesh.vertices {
+		if v.fixed {
+			fixedVertices = append(fixedVertices, v)
 		} else {
-			vertices = append(vertices, vertex)
+			vertices = append(vertices, v)
 		}
 	}
-	for i, vertex := range vertices {
-		vertex.index = i
+	for i, v := range vertices {
+		v.index = i
 	}
-	for i, vertex := range fixedVertices {
-		vertex.index = i
+	for i, v := range fixedVertices {
+		v.index = i
 	}
 	if len(fixedVertices) < 2 {
 		return errors.New("at least two fixed vertices are required")
