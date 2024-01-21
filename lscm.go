@@ -1,25 +1,20 @@
 package lscm
 
 import (
+	"errors"
 	"gonum.org/v1/gonum/mat"
 	"math"
 )
 
-type LSCM struct {
-	mesh *Mesh
-}
+func RunLSCM(mesh *Mesh) error {
+	mesh.RemoveDanglingVertices()
+	mesh.UpdateBoundary()
 
-func NewLSCM(mesh *Mesh) *LSCM {
-	return &LSCM{
-		mesh: mesh,
-	}
-}
-
-func (l *LSCM) setCoefficients() {
-	for _, edge := range l.mesh.edges {
+	// set coefficients
+	for _, edge := range mesh.edges {
 		edge.updateLength()
 	}
-	for _, face := range l.mesh.faces {
+	for _, face := range mesh.faces {
 		hel := [3]float64{}
 		he := face.halfedge
 		for i := 0; i < 3; i++ {
@@ -28,7 +23,6 @@ func (l *LSCM) setCoefficients() {
 		}
 		// law of cosines
 		a := math.Acos((hel[0]*hel[0] + hel[2]*hel[2] - hel[1]*hel[1]) / (2 * hel[0] * hel[2]))
-
 		p := [3]Point3D{
 			{0, 0, 0},
 			{hel[0], 0, 0},
@@ -39,7 +33,6 @@ func (l *LSCM) setCoefficients() {
 		n := n0.cross(&n1)
 		area := n.norm() / 2.0
 		n.divide(area)
-
 		he = face.halfedge
 		for i := 0; i < 3; i++ {
 			np := p[(i+1)%3].sub(&p[i])
@@ -49,15 +42,11 @@ func (l *LSCM) setCoefficients() {
 			he = he.next
 		}
 	}
-}
 
-func (l *LSCM) Project() error {
-	l.setCoefficients()
-
-	vertices := make([]*Vertex, 0, len(l.mesh.vertices))
+	// divide vertices into fixed and unfixed
+	vertices := make([]*Vertex, 0, len(mesh.vertices))
 	fixedVertices := make([]*Vertex, 0, 2)
-
-	for _, vertex := range l.mesh.vertices {
+	for _, vertex := range mesh.vertices {
 		if vertex.fixed {
 			fixedVertices = append(fixedVertices, vertex)
 		} else {
@@ -70,16 +59,18 @@ func (l *LSCM) Project() error {
 	for i, vertex := range fixedVertices {
 		vertex.index = i
 	}
+	if len(fixedVertices) < 2 {
+		return errors.New("at least two fixed vertices are required")
+	}
 
-	fn := len(l.mesh.faces)
+	// prepare matrices for least squares
+	fn := len(mesh.faces)
 	vfn := len(fixedVertices)
 	vn := len(vertices)
-
 	amat := mat.NewDense(2*fn, 2*vn, nil)
 	bmat := mat.NewDense(2*fn, 2*vfn, nil)
 	fmat := mat.NewVecDense(2*vfn, nil)
-
-	for fid, face := range l.mesh.faces {
+	for fid, face := range mesh.faces {
 		he := face.halfedge
 		for i := 0; i < 3; i++ {
 			v := he.next.target()
@@ -94,24 +85,24 @@ func (l *LSCM) Project() error {
 				bmat.Set(fn+fid, vfn+vid, he.coefficients.X)
 				bmat.Set(fid, vfn+vid, -he.coefficients.Y)
 				bmat.Set(fn+fid, vid, he.coefficients.Y)
-
 				fmat.SetVec(vid, v.uv.X)
 				fmat.SetVec(vfn+vid, v.uv.Y)
 			}
 			he = he.next
 		}
 	}
-
 	rmat := mat.NewVecDense(2*fn, nil)
 	rmat.MulVec(bmat, fmat)
 	rmat.ScaleVec(-1, rmat)
 
+	// solve least squares
 	smat := mat.NewDense(2*vn, 1, nil)
 	err := smat.Solve(amat, rmat)
 	if err != nil {
 		return err
 	}
 
+	// read UVs out to vertices
 	uvMin := Point2D{}
 	uvMax := Point2D{}
 	for i, v := range vertices {
@@ -124,7 +115,8 @@ func (l *LSCM) Project() error {
 		uvMax.X = max(uvMax.X, v.uv.X)
 		uvMax.Y = max(uvMax.Y, v.uv.Y)
 	}
-	for _, v := range l.mesh.vertices {
+	// scale UVs to be within the range [0:1]
+	for _, v := range mesh.vertices {
 		v.uv = Point2D{
 			X: (v.uv.X - uvMin.X) / (uvMax.X - uvMin.X),
 			Y: (v.uv.Y - uvMin.Y) / (uvMax.Y - uvMin.Y),

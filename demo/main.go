@@ -21,8 +21,7 @@ func main() {
 
 	log.Printf("Running LSCM")
 
-	cm := lscm.NewLSCM(mesh)
-	if err = cm.Project(); err != nil {
+	if err = lscm.RunLSCM(mesh); err != nil {
 		log.Panic(err)
 	}
 

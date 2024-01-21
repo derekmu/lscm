@@ -8,14 +8,19 @@ import (
 	"strings"
 )
 
+// ParseObj parses a Wavefront .obj file content into a Mesh.
+//
+// At least two of the vertex lines need "fix 0.0, 0.0" post-fixed to the line to indicate fixed vertices for LSCM
+// The coordinates are fixed texture coordinates for those vertexes.
+//
+// This does not support all obj properties.
+// Only parses vertices, normals, and faces while ignoring other lines.
+// Assumes the corresponding normal indices are the same as the vertex indices.
 func ParseObj(obj string) (*Mesh, error) {
 	m := NewMesh()
-	vid := 1
-	nid := 1
+	ni := 0
+	var line, t string
 	var ok bool
-	var line, t, xs, ys, zs, as, bs, cs string
-	var a, b, c int
-	var av, bv, cv *Vertex
 	var err error
 	for {
 		line, obj, ok = strings.Cut(obj, "\n")
@@ -24,150 +29,137 @@ func ParseObj(obj string) (*Mesh, error) {
 		}
 		t, line, ok = strings.Cut(line, " ")
 		if !ok {
-			return nil, errors.New("space not found separating line type token")
+			return nil, errors.New("expected space after line type token")
 		}
 		switch t {
 		case "v":
-			p := Point3D{}
-			xs, line, ok = strings.Cut(line, " ")
-			if !ok {
-				return nil, errors.New("space not found separating coordinates for vertex")
-			}
-			ys, line, ok = strings.Cut(line, " ")
-			if !ok {
-				return nil, errors.New("space not found separating coordinates for vertex")
-			}
-			zs, line, _ = strings.Cut(line, " ")
-
-			p.X, err = strconv.ParseFloat(xs, 64)
-			if err != nil {
+			if err = parseVertex(m, line); err != nil {
 				return nil, err
 			}
-			p.Y, err = strconv.ParseFloat(ys, 64)
-			if err != nil {
-				return nil, err
-			}
-			p.Z, err = strconv.ParseFloat(zs, 64)
-			if err != nil {
-				return nil, err
-			}
-
-			v := m.createVertex(vid, p)
-			line, v.fixed = strings.CutPrefix(line, "fix ")
-			if v.fixed {
-				xs, ys, ok = strings.Cut(line, " ")
-				if !ok {
-					return nil, errors.New("space not found separating fixed coordinates for vertex")
-				}
-				v.uv.X, err = strconv.ParseFloat(xs, 64)
-				if err != nil {
-					return nil, err
-				}
-				v.uv.Y, err = strconv.ParseFloat(ys, 64)
-				if err != nil {
-					return nil, err
-				}
-			}
-			vid++
 		case "vn":
-			v := m.vertexMap[nid]
-			xs, line, ok = strings.Cut(line, " ")
-			if !ok {
-				return nil, errors.New("space not found separating coordinates for vertex normal")
-			}
-			ys, line, ok = strings.Cut(line, " ")
-			if !ok {
-				return nil, errors.New("space not found separating coordinates for vertex normal")
-			}
-			zs, line, _ = strings.Cut(line, " ")
-
-			v.normal.X, err = strconv.ParseFloat(xs, 64)
-			if err != nil {
+			if err = parseNormal(m, line, ni); err != nil {
 				return nil, err
 			}
-			v.normal.Y, err = strconv.ParseFloat(ys, 64)
-			if err != nil {
-				return nil, err
-			}
-			v.normal.Z, err = strconv.ParseFloat(zs, 64)
-			if err != nil {
-				return nil, err
-			}
-			nid++
+			ni++
 		case "f":
-			as, line, ok = strings.Cut(line, " ")
-			if !ok {
-				return nil, errors.New("space not found separating vertex index for face")
-			}
-			as, _, _ = strings.Cut(as, "/")
-			bs, line, ok = strings.Cut(line, " ")
-			if !ok {
-				return nil, errors.New("space not found separating vertex index for face")
-			}
-			bs, _, _ = strings.Cut(bs, "/")
-			cs, line, _ = strings.Cut(line, " ")
-			cs, _, _ = strings.Cut(cs, "/")
-
-			a, err = strconv.Atoi(as)
-			if err != nil {
+			if err = parseFace(m, line); err != nil {
 				return nil, err
 			}
-			b, err = strconv.Atoi(bs)
-			if err != nil {
-				return nil, err
-			}
-			c, err = strconv.Atoi(cs)
-			if err != nil {
-				return nil, err
-			}
-
-			if av, ok = m.vertexMap[a]; !ok {
-				return nil, errors.New("vertex not found for face")
-			}
-			if bv, ok = m.vertexMap[b]; !ok {
-				return nil, errors.New("vertex not found for face")
-			}
-			if cv, ok = m.vertexMap[c]; !ok {
-				return nil, errors.New("vertex not found for face")
-			}
-
-			m.createFace([3]*Vertex{av, bv, cv})
 		default:
-			// we don't need anything except vertices and faces
-		}
-	}
-	// label boundary edges
-	for _, edge := range m.edges {
-		if edge.halfedges[1] != nil {
-			if edge.halfedges[0].target().id < edge.halfedges[0].source().id {
-				edge.halfedges[0], edge.halfedges[1] = edge.halfedges[1], edge.halfedges[0]
-			}
-		} else {
-			edge.halfedges[0].vertex.boundary = true
-			edge.halfedges[0].prev.vertex.boundary = true
-		}
-	}
-	// remove dangling vertices
-	for i := 0; i < len(m.vertices); i++ {
-		v := m.vertices[i]
-		if v.halfedge == nil {
-			m.vertices[i] = m.vertices[len(m.vertices)-1]
-			m.vertices = m.vertices[:len(m.vertices)-1]
-			i--
-			delete(m.vertexMap, v.id)
-		}
-	}
-	// arrange the half edge of boundary vertices to make it's halfedge the most counterclockwise
-	for _, v := range m.vertices {
-		if v.boundary {
-			for v.halfedge.other() != nil {
-				v.halfedge = v.halfedge.other().prev
-			}
+			// ignore everything else
 		}
 	}
 	return m, nil
 }
 
+func parseFace(m *Mesh, line string) error {
+	var as, bs, cs string
+	var a, b, c int
+	var ok bool
+	var err error
+	as, line, ok = strings.Cut(line, " ")
+	if !ok {
+		return errors.New("expected space after face index a")
+	}
+	as, _, _ = strings.Cut(as, "/")
+	bs, line, ok = strings.Cut(line, " ")
+	if !ok {
+		return errors.New("expected space after face index b")
+	}
+	bs, _, _ = strings.Cut(bs, "/")
+	cs, line, _ = strings.Cut(line, " ")
+	cs, _, _ = strings.Cut(cs, "/")
+	a, err = strconv.Atoi(as)
+	if err != nil {
+		return err
+	}
+	b, err = strconv.Atoi(bs)
+	if err != nil {
+		return err
+	}
+	c, err = strconv.Atoi(cs)
+	if err != nil {
+		return err
+	}
+	m.AddFace([3]int{a - 1, b - 1, c - 1})
+	return nil
+}
+
+func parseNormal(m *Mesh, line string, ni int) error {
+	var xs, ys, zs string
+	var ok bool
+	var err error
+	xs, line, ok = strings.Cut(line, " ")
+	if !ok {
+		return errors.New("space not found separating coordinates for vertex normal")
+	}
+	ys, line, ok = strings.Cut(line, " ")
+	if !ok {
+		return errors.New("space not found separating coordinates for vertex normal")
+	}
+	zs, line, _ = strings.Cut(line, " ")
+	v := m.vertices[ni]
+	v.normal.X, err = strconv.ParseFloat(xs, 64)
+	if err != nil {
+		return err
+	}
+	v.normal.Y, err = strconv.ParseFloat(ys, 64)
+	if err != nil {
+		return err
+	}
+	v.normal.Z, err = strconv.ParseFloat(zs, 64)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func parseVertex(m *Mesh, line string) error {
+	var xs, ys, zs string
+	var ok bool
+	var err error
+	if xs, line, ok = strings.Cut(line, " "); !ok {
+		return errors.New("expected space after vertex x coordinate")
+	}
+	if ys, line, ok = strings.Cut(line, " "); !ok {
+		return errors.New("expected space after vertex y coordinate")
+	}
+	zs, line, _ = strings.Cut(line, " ")
+	p := Point3D{}
+	if p.X, err = strconv.ParseFloat(xs, 64); err != nil {
+		return err
+	}
+	if p.Y, err = strconv.ParseFloat(ys, 64); err != nil {
+		return err
+	}
+	if p.Z, err = strconv.ParseFloat(zs, 64); err != nil {
+		return err
+	}
+	fixLine, fixed := strings.CutPrefix(line, "fix ")
+	if fixed {
+		xs, ys, ok = strings.Cut(fixLine, " ")
+		if !ok {
+			return errors.New("expected space after fixed vertex x coordinate")
+		}
+		uv := Point2D{}
+		uv.X, err = strconv.ParseFloat(xs, 64)
+		if err != nil {
+			return err
+		}
+		uv.Y, err = strconv.ParseFloat(ys, 64)
+		if err != nil {
+			return err
+		}
+		m.AddVertex(p, true, uv)
+	} else {
+		m.AddVertex(p, false, Point2D{})
+	}
+	return nil
+}
+
+// WriteObj writes a Wavefront .obj file content to the writer.
+//
+// This only supports vertices, texture coordinates, normals, and faces.
 func WriteObj(w io.Writer, m *Mesh) error {
 	// vertices
 	for _, vertex := range m.vertices {
@@ -195,7 +187,7 @@ func WriteObj(w io.Writer, m *Mesh) error {
 		halfedge := face.halfedge
 		for {
 			vertex := halfedge.vertex
-			if _, err := fmt.Fprintf(w, "%d/%d/%d ", vertex.id, vertex.id, vertex.id); err != nil {
+			if _, err := fmt.Fprintf(w, "%d/%d/%d ", vertex.id+1, vertex.id+1, vertex.id+1); err != nil {
 				return err
 			}
 			halfedge = halfedge.next
