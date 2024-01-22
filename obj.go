@@ -174,39 +174,39 @@ func (d *parseData) parseVertex(line string) error {
 // This only supports vertices, texture coordinates, normals, and faces.
 func WriteObj(w io.Writer, m *Mesh) error {
 	// vertices
-	for _, vertex := range m.vertices {
-		p := m.getPoint(vertex.id)
+	for _, v := range m.vertices {
+		p := m.getPoint(v.id)
 		if _, err := fmt.Fprintf(w, "v %f %f %f\n", p.x, p.y, p.z); err != nil {
 			return err
 		}
 	}
 	// texture coordinates
-	for _, vertex := range m.vertices {
-		uv := m.getUV(vertex.id)
+	for _, v := range m.vertices {
+		uv := m.getUV(v.id)
 		if _, err := fmt.Fprintf(w, "vt %f %f\n", uv.x, uv.y); err != nil {
 			return err
 		}
 	}
 	// vertex normals
-	for _, vertex := range m.vertices {
-		n := m.getNormal(vertex.id)
+	for _, v := range m.vertices {
+		n := m.getNormal(v.id)
 		if _, err := fmt.Fprintf(w, "vn %f %f %f\n", n.x, n.y, n.z); err != nil {
 			return err
 		}
 	}
 	// faces
-	for _, face := range m.faces {
+	for _, f := range m.faces {
 		if _, err := fmt.Fprint(w, "f"); err != nil {
 			return err
 		}
-		halfedge := face.halfedge
+		halfedge := f.halfedge
 		for {
-			vertex := halfedge.vertex
-			if _, err := fmt.Fprintf(w, " %d/%d/%d", vertex.id+1, vertex.id+1, vertex.id+1); err != nil {
+			v := halfedge.vertex
+			if _, err := fmt.Fprintf(w, " %d/%d/%d", v.id+1, v.id+1, v.id+1); err != nil {
 				return err
 			}
 			halfedge = halfedge.next
-			if halfedge == face.halfedge {
+			if halfedge == f.halfedge {
 				break
 			}
 		}

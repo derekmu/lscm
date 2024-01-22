@@ -114,6 +114,10 @@ func RunLSCM(mesh *Mesh) error {
 	}
 	// scale UVs to be within the range [0:1]
 	for _, v := range mesh.vertices {
+		if v.halfedge == nil {
+			// ignore dangling vertices
+			continue
+		}
 		uv := mesh.getUV(v.id)
 		uv = point2D{
 			x: (uv.x - uvMin.x) / (uvMax.x - uvMin.x),
