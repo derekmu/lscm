@@ -80,6 +80,18 @@ func (m *Mesh) setPoint(vi int, p point3D) {
 	m.points[vi*3+2] = p.z
 }
 
+func (m *Mesh) getUV(vi int) point2D {
+	return point2D{
+		x: m.uvs[vi*2],
+		y: m.uvs[vi*2+1],
+	}
+}
+
+func (m *Mesh) setUV(vi int, uv point2D) {
+	m.uvs[vi*2] = uv.x
+	m.uvs[vi*2+1] = uv.y
+}
+
 func (m *Mesh) getNormal(vi int) point3D {
 	return point3D{
 		x: m.normals[vi*3],
@@ -94,28 +106,16 @@ func (m *Mesh) setNormal(vi int, n point3D) {
 	m.normals[vi*3+2] = n.z
 }
 
-func (m *Mesh) getUV(vi int) point2D {
-	return point2D{
-		x: m.uvs[vi*2],
-		y: m.uvs[vi*2+1],
-	}
-}
-
-func (m *Mesh) setUV(vi int, uv point2D) {
-	m.uvs[vi*2] = uv.x
-	m.uvs[vi*2+1] = uv.y
-}
-
 func (m *Mesh) GetPoints() []float32 {
 	return m.points
 }
 
-func (m *Mesh) GetNormals() []float32 {
-	return m.normals
-}
-
 func (m *Mesh) GetUVs() []float32 {
 	return m.uvs
+}
+
+func (m *Mesh) GetNormals() []float32 {
+	return m.normals
 }
 
 func (m *Mesh) addFace(vis [3]int) *face {
@@ -171,10 +171,12 @@ func (m *Mesh) removeDanglingVertices() {
 			m.vertices = m.vertices[:endi]
 			m.setPoint(i, m.getPoint(endi))
 			m.points = m.points[:endi*3]
-			m.setNormal(i, m.getNormal(endi))
-			m.normals = m.normals[:endi*3]
 			m.setUV(i, m.getUV(endi))
 			m.uvs = m.uvs[:endi*2]
+			if m.normals != nil {
+				m.setNormal(i, m.getNormal(endi))
+				m.normals = m.normals[:endi*3]
+			}
 			i--
 		} else {
 			m.vertices[i].id = i
