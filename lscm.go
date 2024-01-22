@@ -7,14 +7,15 @@ import (
 )
 
 func RunLSCM(mesh *Mesh) error {
-	mesh.removeDanglingVertices()
 	mesh.updateBoundary()
 
 	// divide vertices into fixed and unfixed
 	vertices := make([]*vertex, 0, len(mesh.vertices))
 	fixedVertices := make([]*vertex, 0, 2)
 	for _, v := range mesh.vertices {
-		if v.fixed {
+		if v.halfedge == nil {
+			// ignore dangling vertices
+		} else if v.fixed {
 			fixedVertices = append(fixedVertices, v)
 		} else {
 			vertices = append(vertices, v)

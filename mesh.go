@@ -162,28 +162,6 @@ func (m *Mesh) addEdge(vi1, vi2 int) *edge {
 	return e
 }
 
-func (m *Mesh) removeDanglingVertices() {
-	for i := 0; i < len(m.vertices); i++ {
-		v := m.vertices[i]
-		if v.halfedge == nil {
-			endi := len(m.vertices) - 1
-			m.vertices[i] = m.vertices[endi]
-			m.vertices = m.vertices[:endi]
-			m.setPoint(i, m.getPoint(endi))
-			m.points = m.points[:endi*3]
-			m.setUV(i, m.getUV(endi))
-			m.uvs = m.uvs[:endi*2]
-			if m.normals != nil {
-				m.setNormal(i, m.getNormal(endi))
-				m.normals = m.normals[:endi*3]
-			}
-			i--
-		} else {
-			m.vertices[i].id = i
-		}
-	}
-}
-
 func (m *Mesh) updateBoundary() {
 	for _, e := range m.edges {
 		if e.halfedges[1] == nil {
