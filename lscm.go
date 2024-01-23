@@ -98,7 +98,7 @@ func RunLSCM(mesh *Mesh) error {
 		return err
 	}
 
-	// read UVs out to vertices
+	// track min/max UVs for scaling
 	uvMin := point2D{
 		x: math.MaxFloat32,
 		y: math.MaxFloat32,
@@ -107,6 +107,7 @@ func RunLSCM(mesh *Mesh) error {
 		x: -math.MaxFloat32,
 		y: -math.MaxFloat32,
 	}
+	// read UVs out to vertices
 	for i, v := range vertices {
 		uv := point2D{
 			x: float32(smat.At(i, 0)),
@@ -118,12 +119,23 @@ func RunLSCM(mesh *Mesh) error {
 		uvMax.x = max(uvMax.x, uv.x)
 		uvMax.y = max(uvMax.y, uv.y)
 	}
+	for _, v := range fixedVertices {
+		uv := mesh.getUV(v.id)
+		uvMin.x = min(uvMin.x, uv.x)
+		uvMin.y = min(uvMin.y, uv.y)
+		uvMax.x = max(uvMax.x, uv.x)
+		uvMax.y = max(uvMax.y, uv.y)
+	}
 	// scale UVs to be within the range [0:1]
-	for _, v := range mesh.vertices {
-		if v.halfedge == nil {
-			// ignore dangling vertices
-			continue
+	for _, v := range fixedVertices {
+		uv := mesh.getUV(v.id)
+		uv = point2D{
+			x: (uv.x - uvMin.x) / (uvMax.x - uvMin.x),
+			y: (uv.y - uvMin.y) / (uvMax.y - uvMin.y),
 		}
+		mesh.setUV(v.id, uv)
+	}
+	for _, v := range vertices {
 		uv := mesh.getUV(v.id)
 		uv = point2D{
 			x: (uv.x - uvMin.x) / (uvMax.x - uvMin.x),
