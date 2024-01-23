@@ -99,8 +99,14 @@ func RunLSCM(mesh *Mesh) error {
 	}
 
 	// read UVs out to vertices
-	uvMin := point2D{}
-	uvMax := point2D{}
+	uvMin := point2D{
+		x: math.MaxFloat32,
+		y: math.MaxFloat32,
+	}
+	uvMax := point2D{
+		x: -math.MaxFloat32,
+		y: -math.MaxFloat32,
+	}
 	for i, v := range vertices {
 		uv := point2D{
 			x: float32(smat.At(i, 0)),
